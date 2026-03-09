@@ -1,4 +1,4 @@
-module mailfeed
+module github.com/iley/mailfeed
 
 go 1.26.1
 

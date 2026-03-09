@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"mailfeed/config"
+	"github.com/iley/mailfeed/internal/config"
 
 	"github.com/mmcdole/gofeed"
 )

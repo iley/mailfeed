@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoadValidConfig(t *testing.T) {
-	cfg, err := Load("../testdata/config.yaml")
+	cfg, err := Load("../../testdata/config.yaml")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

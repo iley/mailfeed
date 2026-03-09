@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"mailfeed/feed"
+	"github.com/iley/mailfeed/internal/feed"
 )
 
 var sampleItem = feed.Item{

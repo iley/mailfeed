@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"mailfeed/config"
-	"mailfeed/email"
-	"mailfeed/feed"
+	"github.com/iley/mailfeed/internal/config"
+	"github.com/iley/mailfeed/internal/email"
+	"github.com/iley/mailfeed/internal/feed"
 )
 
 func main() {

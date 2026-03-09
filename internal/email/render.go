@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/net/html"
 
-	"mailfeed/feed"
+	"github.com/iley/mailfeed/internal/feed"
 )
 
 var (

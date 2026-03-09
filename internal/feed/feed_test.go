@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseRSS(t *testing.T) {
-	f, err := os.Open("../testdata/sample_rss.xml")
+	f, err := os.Open("../../testdata/sample_rss.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestParseRSS(t *testing.T) {
 }
 
 func TestContentFallback(t *testing.T) {
-	f, err := os.Open("../testdata/sample_rss.xml")
+	f, err := os.Open("../../testdata/sample_rss.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestContentFallback(t *testing.T) {
 }
 
 func TestGUIDFallback(t *testing.T) {
-	f, err := os.Open("../testdata/sample_rss.xml")
+	f, err := os.Open("../../testdata/sample_rss.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestGUIDFallback(t *testing.T) {
 }
 
 func TestParseAtom(t *testing.T) {
-	f, err := os.Open("../testdata/sample_atom.xml")
+	f, err := os.Open("../../testdata/sample_atom.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestParseAtom(t *testing.T) {
 }
 
 func TestFetchHTTP(t *testing.T) {
-	rssData, err := os.ReadFile("../testdata/sample_rss.xml")
+	rssData, err := os.ReadFile("../../testdata/sample_rss.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
