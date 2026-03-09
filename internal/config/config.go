@@ -30,6 +30,7 @@ type SMTPConfig struct {
 	Port     int    `yaml:"port"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+	TLS      string `yaml:"tls"` // "implicit", "starttls", or "" (auto based on port)
 }
 
 func (c Config) CheckIntervalDuration() (time.Duration, error) {
@@ -68,6 +69,11 @@ func (c Config) validate() error {
 	}
 	if c.Email.To == "" {
 		return fmt.Errorf("missing email.to")
+	}
+	switch c.Email.SMTP.TLS {
+	case "", "implicit", "starttls":
+	default:
+		return fmt.Errorf("invalid smtp.tls: %q (must be \"implicit\", \"starttls\", or empty)", c.Email.SMTP.TLS)
 	}
 	if c.CheckInterval != "" {
 		if _, err := time.ParseDuration(c.CheckInterval); err != nil {

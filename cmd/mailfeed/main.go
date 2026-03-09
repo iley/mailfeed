@@ -12,6 +12,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	dryRun := flag.Bool("dry-run", false, "fetch feeds and render emails without sending")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -24,17 +25,23 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Fetched %d items:\n\n", len(items))
-	for _, item := range items {
-		fmt.Printf("[%s] %s\n  %s\n  %s\n\n", item.FeedName, item.Title, item.Link, item.PublishedAt.Format("2006-01-02 15:04"))
+	log.Printf("Fetched %d items", len(items))
+
+	if len(items) == 0 {
+		return
 	}
 
-	if len(items) > 0 {
-		html, err := email.RenderHTML(items[0])
-		if err != nil {
-			log.Fatal(err)
+	if *dryRun {
+		for _, item := range items {
+			fmt.Printf("[%s] %s\n  %s\n\n", item.FeedName, item.Title, item.Link)
 		}
-		fmt.Println("--- HTML preview of first item ---")
-		fmt.Println(html)
+		return
 	}
+
+	sender := email.NewSender(cfg.Email)
+	if err := sender.SendAll(items); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Sent %d emails", len(items))
 }
