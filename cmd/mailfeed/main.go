@@ -8,14 +8,21 @@ import (
 	"github.com/iley/mailfeed/internal/config"
 	"github.com/iley/mailfeed/internal/email"
 	"github.com/iley/mailfeed/internal/feed"
+	"github.com/iley/mailfeed/internal/state"
 )
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	statePath := flag.String("state", "state.json", "path to state file")
 	dryRun := flag.Bool("dry-run", false, "fetch feeds and render emails without sending")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	st, err := state.Load(*statePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -27,21 +34,31 @@ func main() {
 
 	log.Printf("Fetched %d items", len(items))
 
-	if len(items) == 0 {
+	newItems := st.FilterNewItems(items)
+	log.Printf("%d new items to send", len(newItems))
+
+	if len(newItems) == 0 {
 		return
 	}
 
 	if *dryRun {
-		for _, item := range items {
+		for _, item := range newItems {
 			fmt.Printf("[%s] %s\n  %s\n\n", item.FeedName, item.Title, item.Link)
 		}
 		return
 	}
 
 	sender := email.NewSender(cfg.Email)
-	if err := sender.SendAll(items); err != nil {
+	if err := sender.SendAll(newItems); err != nil {
 		log.Fatal(err)
 	}
 
-	log.Printf("Sent %d emails", len(items))
+	for _, item := range newItems {
+		st.MarkSeen(item.GUID)
+	}
+	if err := st.Save(*statePath); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Sent %d emails", len(newItems))
 }
