@@ -48,17 +48,18 @@ func main() {
 		return
 	}
 
+	var sent int
 	sender := email.NewSender(cfg.Email)
-	if err := sender.SendAll(newItems); err != nil {
-		log.Fatal(err)
-	}
-
-	for _, item := range newItems {
+	err = sender.SendAll(newItems, func(item feed.Item) {
+		sent++
 		st.MarkSeen(item.GUID)
-	}
-	if err := st.Save(*statePath); err != nil {
-		log.Fatal(err)
+		if err := st.Save(*statePath); err != nil {
+			log.Printf("WARNING: failed to save state: %v", err)
+		}
+	})
+	if err != nil {
+		log.Fatalf("Sent %d/%d emails, errors: %v", sent, len(newItems), err)
 	}
 
-	log.Printf("Sent %d emails", len(newItems))
+	log.Printf("Sent %d emails", sent)
 }

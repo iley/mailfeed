@@ -143,6 +143,11 @@ func TestStripHTML(t *testing.T) {
 			input: "<p>First</p><p>Second</p>",
 			want:  "First\nSecond",
 		},
+		{
+			name:  "self-closing br",
+			input: "line one<br/>line two<br />line three",
+			want:  "line one\nline two\nline three",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

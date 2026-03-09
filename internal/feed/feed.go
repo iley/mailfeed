@@ -1,8 +1,10 @@
 package feed
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -22,18 +24,26 @@ type Item struct {
 
 func FetchAll(feeds []config.Feed) ([]Item, error) {
 	var all []Item
+	var failed int
 	for _, f := range feeds {
 		items, err := Fetch(f.URL, f.Name)
 		if err != nil {
-			return nil, fmt.Errorf("fetching %s: %w", f.URL, err)
+			log.Printf("WARNING: skipping feed %s: %v", f.URL, err)
+			failed++
+			continue
 		}
 		all = append(all, items...)
+	}
+	if failed == len(feeds) {
+		return nil, fmt.Errorf("all %d feeds failed", failed)
 	}
 	return all, nil
 }
 
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 func Fetch(url, feedName string) ([]Item, error) {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP GET: %w", err)
 	}
@@ -69,6 +79,10 @@ func mapItem(gi *gofeed.Item, feedName string) Item {
 	guid := gi.GUID
 	if guid == "" {
 		guid = gi.Link
+	}
+	if guid == "" {
+		h := sha256.Sum256([]byte(feedName + "\x00" + gi.Title + "\x00" + content))
+		guid = fmt.Sprintf("sha256:%x", h[:12])
 	}
 
 	var published time.Time

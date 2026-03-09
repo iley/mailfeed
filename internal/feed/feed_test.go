@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/mmcdole/gofeed"
 )
 
 func TestParseRSS(t *testing.T) {
@@ -74,6 +77,25 @@ func TestGUIDFallback(t *testing.T) {
 	// Third item: has no guid, should fall back to link
 	if items[2].GUID != "https://example.com/third" {
 		t.Errorf("expected GUID to fall back to link, got %q", items[2].GUID)
+	}
+}
+
+func TestGUIDSyntheticWhenEmpty(t *testing.T) {
+	item1 := mapItem(&gofeed.Item{Title: "Post A", Description: "content A"}, "Blog")
+	item2 := mapItem(&gofeed.Item{Title: "Post B", Description: "content B"}, "Blog")
+	item3 := mapItem(&gofeed.Item{Title: "Post A", Description: "content A"}, "Blog")
+
+	if item1.GUID == "" {
+		t.Error("expected synthetic GUID, got empty string")
+	}
+	if !strings.HasPrefix(item1.GUID, "sha256:") {
+		t.Errorf("expected sha256: prefix, got %q", item1.GUID)
+	}
+	if item1.GUID == item2.GUID {
+		t.Error("different items should have different synthetic GUIDs")
+	}
+	if item1.GUID != item3.GUID {
+		t.Error("identical items should have the same synthetic GUID")
 	}
 }
 

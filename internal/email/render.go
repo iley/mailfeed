@@ -86,7 +86,7 @@ func stripHTML(s string) string {
 			return strings.TrimSpace(buf.String())
 		case html.TextToken:
 			buf.WriteString(tokenizer.Token().Data)
-		case html.StartTagToken:
+		case html.StartTagToken, html.SelfClosingTagToken:
 			t := tokenizer.Token()
 			switch t.Data {
 			case "br", "p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr":

@@ -121,7 +121,7 @@ func TestUseImplicitTLS(t *testing.T) {
 
 func TestSendAllEmpty(t *testing.T) {
 	s := NewSender(config.Email{})
-	if err := s.SendAll(nil); err != nil {
+	if err := s.SendAll(nil, nil); err != nil {
 		t.Errorf("expected no error for empty items, got %v", err)
 	}
 }

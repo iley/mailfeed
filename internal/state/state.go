@@ -12,14 +12,18 @@ import (
 )
 
 type State struct {
-	Seen map[string]time.Time `json:"seen"`
+	Seen       map[string]time.Time `json:"seen"`
+	KnownFeeds map[string]bool      `json:"known_feeds"`
 }
 
 func Load(path string) (*State, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &State{Seen: make(map[string]time.Time)}, nil
+			return &State{
+			Seen:       make(map[string]time.Time),
+			KnownFeeds: make(map[string]bool),
+		}, nil
 		}
 		return nil, fmt.Errorf("reading state: %w", err)
 	}
@@ -30,6 +34,9 @@ func Load(path string) (*State, error) {
 	}
 	if s.Seen == nil {
 		s.Seen = make(map[string]time.Time)
+	}
+	if s.KnownFeeds == nil {
+		s.KnownFeeds = make(map[string]bool)
 	}
 	return &s, nil
 }
@@ -64,21 +71,20 @@ func (s *State) MarkSeen(guid string) {
 }
 
 // FilterNewItems returns items that should be sent.
-// For feeds where no items have been seen before (first fetch),
-// only the latest item is returned and the rest are marked as seen.
-// For known feeds, all unseen items are returned.
+// For feeds never processed before, only the latest item is returned
+// and the rest are marked as seen. For known feeds, all unseen items
+// are returned (even if all items have rotated out of the feed).
 func (s *State) FilterNewItems(items []feed.Item) []feed.Item {
-	// Group items by feed name.
 	byFeed := make(map[string][]feed.Item)
 	for _, item := range items {
 		byFeed[item.FeedName] = append(byFeed[item.FeedName], item)
 	}
 
 	var result []feed.Item
-	for _, feedItems := range byFeed {
-		if s.feedIsNew(feedItems) {
+	for feedName, feedItems := range byFeed {
+		if !s.KnownFeeds[feedName] {
+			s.KnownFeeds[feedName] = true
 			latest := latestItem(feedItems)
-			// Mark all other items as seen so they're never sent.
 			for _, item := range feedItems {
 				if item.GUID != latest.GUID {
 					s.MarkSeen(item.GUID)
@@ -94,16 +100,6 @@ func (s *State) FilterNewItems(items []feed.Item) []feed.Item {
 		}
 	}
 	return result
-}
-
-// feedIsNew returns true if none of the feed's items have been seen.
-func (s *State) feedIsNew(items []feed.Item) bool {
-	for _, item := range items {
-		if s.HasSeen(item.GUID) {
-			return false
-		}
-	}
-	return true
 }
 
 func latestItem(items []feed.Item) feed.Item {

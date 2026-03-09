@@ -22,7 +22,9 @@ func NewSender(cfg config.Email) *Sender {
 }
 
 // SendAll sends one email per item over a single SMTP connection.
-func (s *Sender) SendAll(items []feed.Item) error {
+// The onSent callback is called after each item is successfully sent,
+// allowing the caller to save progress incrementally.
+func (s *Sender) SendAll(items []feed.Item, onSent func(feed.Item)) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -37,13 +39,28 @@ func (s *Sender) SendAll(items []feed.Item) error {
 		return fmt.Errorf("smtp auth: %w", err)
 	}
 
+	var errs []string
 	for _, item := range items {
 		if err := s.sendItem(c, item); err != nil {
-			return fmt.Errorf("sending %q: %w", item.Title, err)
+			errs = append(errs, fmt.Sprintf("%s: %v", item.Title, err))
+			// Try to reset the connection for the next item.
+			if rErr := c.Reset(); rErr != nil {
+				// Connection is broken, no point continuing.
+				return fmt.Errorf("sending failed (%d errors), connection lost: %s", len(errs), strings.Join(errs, "; "))
+			}
+			continue
+		}
+		if onSent != nil {
+			onSent(item)
 		}
 	}
 
-	return c.Quit()
+	c.Quit()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to send %d items: %s", len(errs), strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 func (s *Sender) useImplicitTLS() bool {

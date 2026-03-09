@@ -23,7 +23,7 @@ func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
 
-	s := &State{Seen: make(map[string]time.Time)}
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
 	s.MarkSeen("guid-1")
 	s.MarkSeen("guid-2")
 
@@ -51,7 +51,7 @@ func TestSaveAtomicNoPartialWrite(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
 
-	s := &State{Seen: make(map[string]time.Time)}
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
 	s.MarkSeen("guid-1")
 	if err := s.Save(path); err != nil {
 		t.Fatalf("save: %v", err)
@@ -65,7 +65,8 @@ func TestSaveAtomicNoPartialWrite(t *testing.T) {
 }
 
 func TestFilterKnownFeed(t *testing.T) {
-	s := &State{Seen: make(map[string]time.Time)}
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+	s.KnownFeeds["Blog"] = true
 	s.MarkSeen("old-1")
 
 	items := []feed.Item{
@@ -86,7 +87,7 @@ func TestFilterKnownFeed(t *testing.T) {
 }
 
 func TestFilterNewFeed(t *testing.T) {
-	s := &State{Seen: make(map[string]time.Time)}
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
 
 	items := []feed.Item{
 		{FeedName: "New Blog", GUID: "a", PublishedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
@@ -116,7 +117,8 @@ func TestFilterNewFeed(t *testing.T) {
 }
 
 func TestFilterMixedFeeds(t *testing.T) {
-	s := &State{Seen: make(map[string]time.Time)}
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+	s.KnownFeeds["Known"] = true
 	s.MarkSeen("known-old")
 
 	items := []feed.Item{
@@ -144,5 +146,45 @@ func TestFilterMixedFeeds(t *testing.T) {
 	}
 	if !guids["fresh-2"] {
 		t.Error("expected fresh-2 (latest) in results")
+	}
+}
+
+func TestFilterRotatedFeed(t *testing.T) {
+	// A known feed whose old items have all rotated out.
+	// All current items are unseen, but the feed is known,
+	// so all new items should be sent (not just the latest).
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+	s.KnownFeeds["Blog"] = true
+	s.MarkSeen("old-gone-1")
+	s.MarkSeen("old-gone-2")
+
+	items := []feed.Item{
+		{FeedName: "Blog", GUID: "new-1", PublishedAt: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)},
+		{FeedName: "Blog", GUID: "new-2", PublishedAt: time.Date(2024, 2, 2, 0, 0, 0, 0, time.UTC)},
+		{FeedName: "Blog", GUID: "new-3", PublishedAt: time.Date(2024, 2, 3, 0, 0, 0, 0, time.UTC)},
+	}
+
+	result := s.FilterNewItems(items)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 items for rotated known feed, got %d", len(result))
+	}
+}
+
+func TestKnownFeedsPersist(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+	s.KnownFeeds["Blog"] = true
+	if err := s.Save(path); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !loaded.KnownFeeds["Blog"] {
+		t.Error("expected Blog to be in known feeds after reload")
 	}
 }
