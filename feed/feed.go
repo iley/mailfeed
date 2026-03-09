@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mmcdole/gofeed"
 	"mailfeed/config"
+
+	"github.com/mmcdole/gofeed"
 )
 
 type Item struct {
