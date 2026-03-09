@@ -26,8 +26,6 @@ Inspired by [Blogtrottr](https://blogtrottr.com/), but stripped down to the esse
 
 **Own `Item` struct instead of using `gofeed.Item` directly.** Decouples the domain model from the library. The internal `Item` has exactly the fields needed for email rendering and deduplication, and handles content/GUID fallback logic in one place.
 
-**Flat project structure.** Two packages (`config`, `feed`) plus `main.go`. No `internal/`, no `cmd/mailfeed/` — unnecessary for a single-binary personal tool.
-
 **`flag` package, not cobra.** The CLI has one flag (`-config`) and will have two subcommands (`run`, `daemon`). The standard library is enough.
 
 ## Config Example
