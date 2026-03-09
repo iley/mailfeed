@@ -12,6 +12,7 @@ Inspired by [Blogtrottr](https://blogtrottr.com/), but stripped down to the esse
 - Sends one email per new feed item
 - Renders clean, readable HTML emails with full article content
 - Tracks already-sent items to avoid duplicates (JSON state file)
+- When adding a new feed only sends one latest entry
 - Two run modes: one-shot and periodic daemon
 - No CGO — builds with `CGO_ENABLED=0` for easy deployment
 
