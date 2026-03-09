@@ -1,0 +1,16 @@
+feeds:
+  - name: "Test Blog"
+    url: "https://example.com/feed.xml"
+  - name: "Another Blog"
+    url: "https://example.com/atom.xml"
+
+email:
+  from: "mailfeed@example.com"
+  to: "me@example.com"
+  smtp:
+    host: "smtp.example.com"
+    port: 465
+    username: "user@example.com"
+    password: "secret"
+
+check_interval: "30m"
