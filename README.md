@@ -1,5 +1,7 @@
 # mailfeed
 
+> This project is entirely written by [Claude](https://claude.ai), Anthropic's AI assistant. No human-written code here.
+
 A personal RSS-to-email tool. Fetches RSS/Atom/JSON feeds, renders new items as HTML emails, and sends them via SMTP. Tracks seen items in a JSON state file to avoid duplicates.
 
 Single static binary, no web UI, no signups. Just a config file and a binary.
