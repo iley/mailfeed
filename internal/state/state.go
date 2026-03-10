@@ -14,6 +14,12 @@ import (
 type State struct {
 	Seen       map[string]time.Time `json:"seen"`
 	KnownFeeds map[string]bool      `json:"known_feeds"`
+	DailySends *DailySends          `json:"daily_sends,omitempty"`
+}
+
+type DailySends struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
 }
 
 func Load(path string) (*State, error) {
@@ -82,6 +88,27 @@ func (s *State) HasSeen(feedURL, guid string) bool {
 
 func (s *State) MarkSeen(feedURL, guid string) {
 	s.Seen[seenKey(feedURL, guid)] = time.Now()
+}
+
+func todayString() string {
+	return time.Now().Format("2006-01-02")
+}
+
+// SendsToday returns the number of emails sent today.
+func (s *State) SendsToday() int {
+	if s.DailySends == nil || s.DailySends.Date != todayString() {
+		return 0
+	}
+	return s.DailySends.Count
+}
+
+// RecordSend increments the daily send counter, resetting it if the date has changed.
+func (s *State) RecordSend() {
+	today := todayString()
+	if s.DailySends == nil || s.DailySends.Date != today {
+		s.DailySends = &DailySends{Date: today, Count: 0}
+	}
+	s.DailySends.Count++
 }
 
 func seenKey(feedURL, guid string) string {

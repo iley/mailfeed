@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 
@@ -104,6 +105,33 @@ func runOnce(ctx context.Context, cfg *config.Config, statePath string, dryRun b
 		return nil
 	}
 
+	// Sort oldest first so we send items in chronological order
+	// and defer the newest ones when limits kick in.
+	sort.Slice(newItems, func(i, j int) bool {
+		return newItems[i].PublishedAt.Before(newItems[j].PublishedAt)
+	})
+
+	if limit := cfg.Email.MaxPerFeed; limit > 0 {
+		newItems = applyPerFeedLimit(newItems, limit)
+	}
+
+	if limit := cfg.Email.MaxPerDay; limit > 0 {
+		alreadySent := st.SendsToday()
+		remaining := limit - alreadySent
+		if remaining <= 0 {
+			slog.Warn("daily email limit reached, skipping", "limit", limit, "already_sent", alreadySent)
+			return nil
+		}
+		if len(newItems) > remaining {
+			slog.Warn("daily limit caps this run", "limit", limit, "already_sent", alreadySent, "sending", remaining, "deferred", len(newItems)-remaining)
+			newItems = newItems[:remaining]
+		}
+	}
+
+	if len(newItems) == 0 {
+		return nil
+	}
+
 	if dryRun {
 		for _, item := range newItems {
 			fmt.Printf("[%s] %s\n  %s\n\n", item.FeedName, item.Title, item.Link)
@@ -116,6 +144,7 @@ func runOnce(ctx context.Context, cfg *config.Config, statePath string, dryRun b
 	err = sender.SendAll(newItems, func(item feed.Item) {
 		sent++
 		st.MarkSeen(item.FeedURL, item.GUID)
+		st.RecordSend()
 		if err := st.Save(statePath); err != nil {
 			slog.Warn("failed to save state", "error", err)
 		}
@@ -126,4 +155,24 @@ func runOnce(ctx context.Context, cfg *config.Config, statePath string, dryRun b
 
 	slog.Info("sent emails", "count", sent)
 	return nil
+}
+
+// applyPerFeedLimit caps the number of items per feed, keeping the oldest
+// ones (which come first since items are sorted by PublishedAt ascending).
+// Items beyond the limit are simply omitted — they remain unseen in state
+// and will be picked up on the next run.
+func applyPerFeedLimit(items []feed.Item, limit int) []feed.Item {
+	counts := make(map[string]int)
+	var result []feed.Item
+	for _, item := range items {
+		if counts[item.FeedURL] < limit {
+			result = append(result, item)
+			counts[item.FeedURL]++
+		} else if counts[item.FeedURL] == limit {
+			// Log once per feed when we start dropping items.
+			slog.Warn("per-feed limit reached, deferring items", "feed", item.FeedName, "limit", limit)
+			counts[item.FeedURL]++
+		}
+	}
+	return result
 }

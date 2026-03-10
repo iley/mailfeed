@@ -263,6 +263,78 @@ func TestSavePrunes(t *testing.T) {
 	}
 }
 
+func TestRecordSend(t *testing.T) {
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+
+	if s.SendsToday() != 0 {
+		t.Fatalf("expected 0 sends today, got %d", s.SendsToday())
+	}
+
+	s.RecordSend()
+	s.RecordSend()
+	s.RecordSend()
+
+	if s.SendsToday() != 3 {
+		t.Fatalf("expected 3 sends today, got %d", s.SendsToday())
+	}
+}
+
+func TestSendsTodayResetsOnNewDay(t *testing.T) {
+	s := &State{
+		Seen:       make(map[string]time.Time),
+		KnownFeeds: make(map[string]bool),
+		DailySends: &DailySends{Date: "1999-01-01", Count: 42},
+	}
+
+	// Old date should be treated as zero.
+	if s.SendsToday() != 0 {
+		t.Fatalf("expected 0 sends today for stale date, got %d", s.SendsToday())
+	}
+
+	// Recording a send should reset to today.
+	s.RecordSend()
+	if s.SendsToday() != 1 {
+		t.Fatalf("expected 1 send after RecordSend, got %d", s.SendsToday())
+	}
+}
+
+func TestDailySendsSurviveSaveLoad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+	s.RecordSend()
+	s.RecordSend()
+
+	if err := s.Save(path); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if loaded.SendsToday() != 2 {
+		t.Errorf("expected 2 sends today after reload, got %d", loaded.SendsToday())
+	}
+}
+
+func TestLoadStateWithoutDailySends(t *testing.T) {
+	// Backward compat: state files from before this feature have no daily_sends field.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	os.WriteFile(path, []byte(`{"seen":{},"known_feeds":{}}`), 0o644)
+
+	s, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if s.SendsToday() != 0 {
+		t.Errorf("expected 0 sends today for legacy state, got %d", s.SendsToday())
+	}
+}
+
 func TestRenamedFeedStaysKnown(t *testing.T) {
 	// Renaming a feed in config should not treat it as new.
 	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}

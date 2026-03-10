@@ -53,6 +53,8 @@ feeds:
 email:
   from: "mailfeed@example.com"
   to: "me@example.com"
+  max_per_feed: 3
+  max_per_day: 50
   smtp:
     host: "smtp.fastmail.com"
     port: 465
@@ -80,6 +82,8 @@ check_interval: "30m"
 | `smtp.username` | No | SMTP auth username (can also be set via `MAILFEED_SMTP_USER` env var) |
 | `smtp.password` | No | SMTP auth password (can also be set via `MAILFEED_SMTP_PASSWORD` env var) |
 | `smtp.tls` | No | TLS mode: `"implicit"`, `"starttls"`, or `""` (auto-detect based on port) |
+| `max_per_feed` | No | Max emails to send per feed per run (0 = unlimited) |
+| `max_per_day` | No | Max emails to send total per day across all runs (0 = unlimited) |
 
 ### Environment Variables
 

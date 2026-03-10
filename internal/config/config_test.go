@@ -88,6 +88,19 @@ func TestLoadMissingFeeds(t *testing.T) {
 	}
 }
 
+func TestLoadLimits(t *testing.T) {
+	cfg, err := Load("../../testdata/config.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Email.MaxPerFeed != 3 {
+		t.Errorf("expected MaxPerFeed 3, got %d", cfg.Email.MaxPerFeed)
+	}
+	if cfg.Email.MaxPerDay != 50 {
+		t.Errorf("expected MaxPerDay 50, got %d", cfg.Email.MaxPerDay)
+	}
+}
+
 func TestLoadDefaultUserAgent(t *testing.T) {
 	cfg, err := Load("../../testdata/config.yaml")
 	if err != nil {
@@ -111,6 +124,8 @@ func TestValidationErrors(t *testing.T) {
 		{"port 99999", "feeds:\n  - name: Test\n    url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\n  smtp:\n    port: 99999\n    host: h\n"},
 		{"check_interval 0s", base + "check_interval: \"0s\"\n"},
 		{"check_interval negative", base + "check_interval: \"-5m\"\n"},
+		{"negative max_per_feed", "feeds:\n  - url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\n  max_per_feed: -1\n"},
+		{"negative max_per_day", "feeds:\n  - url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\n  max_per_day: -1\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

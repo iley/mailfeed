@@ -22,9 +22,11 @@ type Feed struct {
 }
 
 type Email struct {
-	From string     `yaml:"from"`
-	To   string     `yaml:"to"`
-	SMTP SMTPConfig `yaml:"smtp"`
+	From       string     `yaml:"from"`
+	To         string     `yaml:"to"`
+	SMTP       SMTPConfig `yaml:"smtp"`
+	MaxPerFeed int        `yaml:"max_per_feed"`
+	MaxPerDay  int        `yaml:"max_per_day"`
 }
 
 type SMTPConfig struct {
@@ -93,6 +95,12 @@ func (c Config) validate() error {
 	}
 	if c.Email.SMTP.Port != 0 && (c.Email.SMTP.Port < 1 || c.Email.SMTP.Port > 65535) {
 		return fmt.Errorf("invalid smtp.port: must be 1-65535")
+	}
+	if c.Email.MaxPerFeed < 0 {
+		return fmt.Errorf("invalid email.max_per_feed: must be non-negative")
+	}
+	if c.Email.MaxPerDay < 0 {
+		return fmt.Errorf("invalid email.max_per_day: must be non-negative")
 	}
 	switch c.Email.SMTP.TLS {
 	case "", "implicit", "starttls":

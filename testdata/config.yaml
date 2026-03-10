@@ -7,6 +7,8 @@ feeds:
 email:
   from: "mailfeed@example.com"
   to: "me@example.com"
+  max_per_feed: 3
+  max_per_day: 50
   smtp:
     host: "smtp.example.com"
     port: 465
