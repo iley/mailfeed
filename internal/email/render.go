@@ -17,11 +17,11 @@ var (
 )
 
 type htmlView struct {
-	FeedName    string
-	Title       string
-	Link        string
-	Date        string
-	Content     template.HTML
+	FeedName string
+	Title    string
+	Link     string
+	Date     string
+	Content  template.HTML
 }
 
 type textView struct {

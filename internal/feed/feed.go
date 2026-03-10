@@ -1,10 +1,11 @@
 package feed
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -23,13 +24,13 @@ type Item struct {
 	GUID        string
 }
 
-func FetchAll(feeds []config.Feed) ([]Item, error) {
+func FetchAll(ctx context.Context, feeds []config.Feed) ([]Item, error) {
 	var all []Item
 	var failed int
 	for _, f := range feeds {
-		items, err := Fetch(f.URL, f.Name, f.URL)
+		items, err := Fetch(ctx, f.URL, f.Name, f.URL)
 		if err != nil {
-			log.Printf("WARNING: skipping feed %s: %v", f.URL, err)
+			slog.Warn("skipping feed", "url", f.URL, "error", err)
 			failed++
 			continue
 		}
@@ -43,8 +44,12 @@ func FetchAll(feeds []config.Feed) ([]Item, error) {
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-func Fetch(url, feedName, feedURL string) ([]Item, error) {
-	resp, err := httpClient.Get(url)
+func Fetch(ctx context.Context, url, feedName, feedURL string) ([]Item, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP GET: %w", err)
 	}

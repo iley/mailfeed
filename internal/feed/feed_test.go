@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -149,7 +150,7 @@ func TestFetchHTTP(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	items, err := Fetch(srv.URL, "HTTP Test", srv.URL)
+	items, err := Fetch(context.Background(), srv.URL, "HTTP Test", srv.URL)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -168,7 +169,7 @@ func TestFetchHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Fetch(srv.URL, "Test", srv.URL)
+	_, err := Fetch(context.Background(), srv.URL, "Test", srv.URL)
 	if err == nil {
 		t.Fatal("expected error for 404 response")
 	}

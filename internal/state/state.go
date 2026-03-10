@@ -21,9 +21,9 @@ func Load(path string) (*State, error) {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return &State{
-			Seen:       make(map[string]time.Time),
-			KnownFeeds: make(map[string]bool),
-		}, nil
+				Seen:       make(map[string]time.Time),
+				KnownFeeds: make(map[string]bool),
+			}, nil
 		}
 		return nil, fmt.Errorf("reading state: %w", err)
 	}

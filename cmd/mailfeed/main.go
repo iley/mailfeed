@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/iley/mailfeed/internal/config"
 	"github.com/iley/mailfeed/internal/email"
@@ -12,40 +17,98 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "config.yaml", "path to config file")
-	statePath := flag.String("state", "state.json", "path to state file")
-	dryRun := flag.Bool("dry-run", false, "fetch feeds and render emails without sending")
-	flag.Parse()
-
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatal(err)
+	if len(os.Args) < 2 {
+		fmt.Fprintf(os.Stderr, "Usage: mailfeed <once|loop> [flags]\n")
+		os.Exit(1)
 	}
 
-	st, err := state.Load(*statePath)
-	if err != nil {
-		log.Fatal(err)
+	subcmd := os.Args[1]
+	fs := flag.NewFlagSet(subcmd, flag.ExitOnError)
+	configPath := fs.String("config", "config.yaml", "path to config file")
+	statePath := fs.String("state", "state.json", "path to state file")
+	dryRun := fs.Bool("dry-run", false, "fetch and print without sending")
+	fs.Parse(os.Args[2:])
+
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
+	switch subcmd {
+	case "once":
+		cfg, err := config.Load(*configPath)
+		if err != nil {
+			slog.Error("failed to load config", "error", err)
+			os.Exit(1)
+		}
+		if err := runOnce(context.Background(), cfg, *statePath, *dryRun); err != nil {
+			slog.Error("run failed", "error", err)
+			os.Exit(1)
+		}
+	case "loop":
+		cfg, err := config.Load(*configPath)
+		if err != nil {
+			slog.Error("failed to load config", "error", err)
+			os.Exit(1)
+		}
+		interval, err := cfg.CheckIntervalDuration()
+		if err != nil || interval <= 0 {
+			slog.Error("check_interval is required for loop mode", "error", err)
+			os.Exit(1)
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		runLoop(ctx, cfg, *statePath, *dryRun, interval)
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\nUsage: mailfeed <once|loop> [flags]\n", subcmd)
+		os.Exit(1)
+	}
+}
+
+func runLoop(ctx context.Context, cfg *config.Config, statePath string, dryRun bool, interval time.Duration) {
+	slog.Info("starting loop", "interval", interval)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Run immediately on start.
+	if err := runOnce(ctx, cfg, statePath, dryRun); err != nil {
+		slog.Error("run failed", "error", err)
 	}
 
-	items, err := feed.FetchAll(cfg.Feeds)
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("shutting down")
+			return
+		case <-ticker.C:
+			if err := runOnce(ctx, cfg, statePath, dryRun); err != nil {
+				slog.Error("run failed", "error", err)
+			}
+		}
+	}
+}
+
+func runOnce(ctx context.Context, cfg *config.Config, statePath string, dryRun bool) error {
+	st, err := state.Load(statePath)
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("loading state: %w", err)
 	}
 
-	log.Printf("Fetched %d items", len(items))
+	items, err := feed.FetchAll(ctx, cfg.Feeds)
+	if err != nil {
+		return fmt.Errorf("fetching feeds: %w", err)
+	}
+	slog.Info("fetched items", "count", len(items))
 
 	newItems := st.FilterNewItems(items)
-	log.Printf("%d new items to send", len(newItems))
+	slog.Info("new items", "count", len(newItems))
 
 	if len(newItems) == 0 {
-		return
+		return nil
 	}
 
-	if *dryRun {
+	if dryRun {
 		for _, item := range newItems {
 			fmt.Printf("[%s] %s\n  %s\n\n", item.FeedName, item.Title, item.Link)
 		}
-		return
+		return nil
 	}
 
 	var sent int
@@ -53,13 +116,14 @@ func main() {
 	err = sender.SendAll(newItems, func(item feed.Item) {
 		sent++
 		st.MarkSeen(item.FeedURL, item.GUID)
-		if err := st.Save(*statePath); err != nil {
-			log.Printf("WARNING: failed to save state: %v", err)
+		if err := st.Save(statePath); err != nil {
+			slog.Warn("failed to save state", "error", err)
 		}
 	})
 	if err != nil {
-		log.Fatalf("Sent %d/%d emails, errors: %v", sent, len(newItems), err)
+		return fmt.Errorf("sent %d/%d emails: %w", sent, len(newItems), err)
 	}
 
-	log.Printf("Sent %d emails", sent)
+	slog.Info("sent emails", "count", sent)
+	return nil
 }
