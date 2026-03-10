@@ -91,7 +91,7 @@ func runOnce(ctx context.Context, cfg *config.Config, statePath string, dryRun b
 		return fmt.Errorf("loading state: %w", err)
 	}
 
-	items, err := feed.FetchAll(ctx, cfg.Feeds)
+	items, err := feed.FetchAll(ctx, cfg.Feeds, cfg.UserAgent)
 	if err != nil {
 		return fmt.Errorf("fetching feeds: %w", err)
 	}

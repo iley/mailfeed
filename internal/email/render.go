@@ -6,10 +6,13 @@ import (
 	"strings"
 	texttemplate "text/template"
 
+	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 
 	"github.com/iley/mailfeed/internal/feed"
 )
+
+var sanitizer = bluemonday.UGCPolicy()
 
 var (
 	htmlTmpl = template.Must(template.New("email").Parse(rawHTMLTmpl))
@@ -42,7 +45,7 @@ func toHTMLView(item feed.Item) htmlView {
 		Title:    item.Title,
 		Link:     item.Link,
 		Date:     date,
-		Content:  template.HTML(item.Content),
+		Content:  template.HTML(sanitizer.Sanitize(item.Content)),
 	}
 }
 

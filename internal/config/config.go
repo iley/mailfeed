@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -12,6 +13,7 @@ type Config struct {
 	Feeds         []Feed `yaml:"feeds"`
 	Email         Email  `yaml:"email"`
 	CheckInterval string `yaml:"check_interval"`
+	UserAgent     string `yaml:"user_agent"`
 }
 
 type Feed struct {
@@ -48,6 +50,10 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
+	if cfg.UserAgent == "" {
+		cfg.UserAgent = "mailfeed/1.0"
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -67,8 +73,17 @@ func (c Config) validate() error {
 	if c.Email.From == "" {
 		return fmt.Errorf("missing email.from")
 	}
+	if !strings.Contains(c.Email.From, "@") {
+		return fmt.Errorf("invalid email.from: must contain @")
+	}
 	if c.Email.To == "" {
 		return fmt.Errorf("missing email.to")
+	}
+	if !strings.Contains(c.Email.To, "@") {
+		return fmt.Errorf("invalid email.to: must contain @")
+	}
+	if c.Email.SMTP.Port != 0 && (c.Email.SMTP.Port < 1 || c.Email.SMTP.Port > 65535) {
+		return fmt.Errorf("invalid smtp.port: must be 1-65535")
 	}
 	switch c.Email.SMTP.TLS {
 	case "", "implicit", "starttls":
@@ -76,8 +91,12 @@ func (c Config) validate() error {
 		return fmt.Errorf("invalid smtp.tls: %q (must be \"implicit\", \"starttls\", or empty)", c.Email.SMTP.TLS)
 	}
 	if c.CheckInterval != "" {
-		if _, err := time.ParseDuration(c.CheckInterval); err != nil {
+		d, err := time.ParseDuration(c.CheckInterval)
+		if err != nil {
 			return fmt.Errorf("invalid check_interval: %w", err)
+		}
+		if d <= 0 {
+			return fmt.Errorf("invalid check_interval: must be positive")
 		}
 	}
 	return nil

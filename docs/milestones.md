@@ -38,7 +38,10 @@
 
 ## M6: Edge Cases & Hardening
 
-- Feed autodiscovery (follow redirects, handle common URL patterns)
-- Timeout/retry on feed fetches
-- Content sanitization (strip unsafe HTML for email clients)
-- Config validation with clear error messages
+- Content sanitization via bluemonday (strip scripts, iframes, forms, event handlers)
+- Response body size limit (10 MB) to prevent OOM on malicious/broken feeds
+- Configurable User-Agent header (default `mailfeed/1.0`)
+- Config validation: email format, port range, positive check_interval
+- Feed fetch retry with exponential backoff (3 attempts, retries on 429/5xx)
+- SMTP dial and overall timeouts
+- State file cleanup: prune seen entries older than 90 days on save

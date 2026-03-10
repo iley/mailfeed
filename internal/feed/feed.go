@@ -24,11 +24,11 @@ type Item struct {
 	GUID        string
 }
 
-func FetchAll(ctx context.Context, feeds []config.Feed) ([]Item, error) {
+func FetchAll(ctx context.Context, feeds []config.Feed, userAgent string) ([]Item, error) {
 	var all []Item
 	var failed int
 	for _, f := range feeds {
-		items, err := Fetch(ctx, f.URL, f.Name, f.URL)
+		items, err := Fetch(ctx, f.URL, f.Name, f.URL, userAgent)
 		if err != nil {
 			slog.Warn("skipping feed", "url", f.URL, "error", err)
 			failed++
@@ -44,22 +44,65 @@ func FetchAll(ctx context.Context, feeds []config.Feed) ([]Item, error) {
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-func Fetch(ctx context.Context, url, feedName, feedURL string) ([]Item, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP GET: %w", err)
-	}
-	defer resp.Body.Close()
+const maxResponseBytes = 10 << 20 // 10 MB
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
+const (
+	maxRetries     = 3
+	retryBaseDelay = 1 * time.Second
+)
 
-	return Parse(resp.Body, feedName, feedURL)
+func Fetch(ctx context.Context, url, feedName, feedURL, userAgent string) ([]Item, error) {
+	body, err := fetchHTTP(ctx, url, userAgent)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	return Parse(io.LimitReader(body, maxResponseBytes), feedName, feedURL)
+}
+
+// fetchHTTP fetches a URL with retry logic for transient errors.
+// Returns the response body on success; the caller must close it.
+func fetchHTTP(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
+	var lastErr error
+	for attempt := range maxRetries {
+		if attempt > 0 {
+			delay := retryBaseDelay * time.Duration(1<<(attempt-1))
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+			slog.Warn("retrying feed fetch", "url", url, "attempt", attempt+1, "error", lastErr)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("creating request: %w", err)
+		}
+		if userAgent != "" {
+			req.Header.Set("User-Agent", userAgent)
+		}
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("HTTP GET: %w", err)
+			continue // network errors are retryable
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			return resp.Body, nil
+		}
+		resp.Body.Close()
+
+		lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+
+		// Only retry on 429 or 5xx; other status codes are permanent failures.
+		if resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < 500 {
+			return nil, lastErr
+		}
+	}
+	return nil, lastErr
 }
 
 func Parse(r io.Reader, feedName, feedURL string) ([]Item, error) {

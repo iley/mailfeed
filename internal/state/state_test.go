@@ -214,6 +214,55 @@ func TestSameGUIDAcrossFeeds(t *testing.T) {
 	}
 }
 
+func TestPruneOldEntries(t *testing.T) {
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+	s.KnownFeeds[blogURL] = true
+
+	// Add an old entry (>90 days ago) and a recent one.
+	oldTime := time.Now().Add(-91 * 24 * time.Hour)
+	recentTime := time.Now().Add(-1 * time.Hour)
+	s.Seen[seenKey(blogURL, "old-item")] = oldTime
+	s.Seen[seenKey(blogURL, "recent-item")] = recentTime
+
+	s.Prune()
+
+	if _, ok := s.Seen[seenKey(blogURL, "old-item")]; ok {
+		t.Error("expected old entry to be pruned")
+	}
+	if _, ok := s.Seen[seenKey(blogURL, "recent-item")]; !ok {
+		t.Error("expected recent entry to be kept")
+	}
+	// KnownFeeds should be untouched.
+	if !s.KnownFeeds[blogURL] {
+		t.Error("expected KnownFeeds to be preserved")
+	}
+}
+
+func TestSavePrunes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+	s.Seen[seenKey(blogURL, "old")] = time.Now().Add(-91 * 24 * time.Hour)
+	s.Seen[seenKey(blogURL, "new")] = time.Now()
+
+	if err := s.Save(path); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	if loaded.HasSeen(blogURL, "old") {
+		t.Error("expected old entry to be pruned during save")
+	}
+	if !loaded.HasSeen(blogURL, "new") {
+		t.Error("expected new entry to survive save")
+	}
+}
+
 func TestRenamedFeedStaysKnown(t *testing.T) {
 	// Renaming a feed in config should not treat it as new.
 	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}

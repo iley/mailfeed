@@ -41,7 +41,21 @@ func Load(path string) (*State, error) {
 	return &s, nil
 }
 
+const retentionPeriod = 90 * 24 * time.Hour
+
+// Prune removes seen entries older than the retention period.
+// KnownFeeds are never pruned, so new-feed detection continues to work.
+func (s *State) Prune() {
+	cutoff := time.Now().Add(-retentionPeriod)
+	for key, ts := range s.Seen {
+		if ts.Before(cutoff) {
+			delete(s.Seen, key)
+		}
+	}
+}
+
 func (s *State) Save(path string) error {
+	s.Prune()
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encoding state: %w", err)

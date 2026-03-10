@@ -2,10 +2,12 @@ package feed
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/mmcdole/gofeed"
@@ -150,7 +152,7 @@ func TestFetchHTTP(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	items, err := Fetch(context.Background(), srv.URL, "HTTP Test", srv.URL)
+	items, err := Fetch(context.Background(), srv.URL, "HTTP Test", srv.URL, "mailfeed/1.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -169,8 +171,110 @@ func TestFetchHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Fetch(context.Background(), srv.URL, "Test", srv.URL)
+	_, err := Fetch(context.Background(), srv.URL, "Test", srv.URL, "mailfeed/1.0")
 	if err == nil {
 		t.Fatal("expected error for 404 response")
+	}
+}
+
+func TestFetchSendsUserAgent(t *testing.T) {
+	var gotUA string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	Fetch(context.Background(), srv.URL, "Test", srv.URL, "custom-agent/2.0")
+	if gotUA != "custom-agent/2.0" {
+		t.Errorf("expected User-Agent 'custom-agent/2.0', got %q", gotUA)
+	}
+}
+
+func TestFetchResponseSizeLimit(t *testing.T) {
+	// Serve a body larger than maxResponseBytes. The parser should fail
+	// because it receives truncated (invalid) XML.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		// Write a valid RSS start, then pad with enough data to exceed the limit.
+		fmt.Fprint(w, `<?xml version="1.0"?><rss><channel><title>Big</title><item><title>x</title><description>`)
+		buf := make([]byte, 1024)
+		for i := range buf {
+			buf[i] = 'A'
+		}
+		for range (maxResponseBytes / 1024) + 1 {
+			w.Write(buf)
+		}
+		fmt.Fprint(w, `</description></item></channel></rss>`)
+	}))
+	defer srv.Close()
+
+	_, err := Fetch(context.Background(), srv.URL, "Test", srv.URL, "mailfeed/1.0")
+	if err == nil {
+		t.Fatal("expected error for oversized response")
+	}
+}
+
+func TestFetchRetryOn500(t *testing.T) {
+	rssData, err := os.ReadFile("../../testdata/sample_rss.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := attempts.Add(1)
+		if n <= 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write(rssData)
+	}))
+	defer srv.Close()
+
+	items, err := Fetch(context.Background(), srv.URL, "Test", srv.URL, "mailfeed/1.0")
+	if err != nil {
+		t.Fatalf("expected success after retries, got: %v", err)
+	}
+	if len(items) != 3 {
+		t.Errorf("expected 3 items, got %d", len(items))
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Errorf("expected 3 attempts, got %d", got)
+	}
+}
+
+func TestFetchNoRetryOn404(t *testing.T) {
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	_, err := Fetch(context.Background(), srv.URL, "Test", srv.URL, "mailfeed/1.0")
+	if err == nil {
+		t.Fatal("expected error for 404")
+	}
+	if got := attempts.Load(); got != 1 {
+		t.Errorf("expected 1 attempt for 404, got %d", got)
+	}
+}
+
+func TestFetchExhaustsRetries(t *testing.T) {
+	var attempts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := Fetch(context.Background(), srv.URL, "Test", srv.URL, "mailfeed/1.0")
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if got := attempts.Load(); got != 3 {
+		t.Errorf("expected 3 attempts, got %d", got)
 	}
 }

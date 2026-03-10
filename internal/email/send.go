@@ -74,20 +74,38 @@ func (s *Sender) useImplicitTLS() bool {
 	}
 }
 
+const (
+	smtpDialTimeout    = 30 * time.Second
+	smtpOverallTimeout = 5 * time.Minute
+)
+
 func (s *Sender) connect() (*smtp.Client, error) {
-	addr := fmt.Sprintf("%s:%d", s.cfg.SMTP.Host, s.cfg.SMTP.Port)
+	addr := net.JoinHostPort(s.cfg.SMTP.Host, fmt.Sprintf("%d", s.cfg.SMTP.Port))
 	tlsCfg := &tls.Config{ServerName: s.cfg.SMTP.Host}
+	dialer := &net.Dialer{Timeout: smtpDialTimeout}
 
 	if s.useImplicitTLS() {
-		conn, err := tls.Dial("tcp", addr, tlsCfg)
+		conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsCfg)
 		if err != nil {
 			return nil, err
 		}
-		return smtp.NewClient(conn, s.cfg.SMTP.Host)
+		conn.SetDeadline(time.Now().Add(smtpOverallTimeout))
+		c, err := smtp.NewClient(conn, s.cfg.SMTP.Host)
+		if err != nil {
+			conn.Close()
+			return nil, err
+		}
+		return c, nil
 	}
 
-	c, err := smtp.Dial(addr)
+	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
+		return nil, err
+	}
+	conn.SetDeadline(time.Now().Add(smtpOverallTimeout))
+	c, err := smtp.NewClient(conn, s.cfg.SMTP.Host)
+	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 	if err := c.StartTLS(tlsCfg); err != nil {

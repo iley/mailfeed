@@ -88,6 +88,48 @@ func TestLoadMissingFeeds(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultUserAgent(t *testing.T) {
+	cfg, err := Load("../../testdata/config.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.UserAgent != "mailfeed/1.0" {
+		t.Errorf("expected default UserAgent 'mailfeed/1.0', got %q", cfg.UserAgent)
+	}
+}
+
+func TestValidationErrors(t *testing.T) {
+	// Base valid config that we modify per test case.
+	base := "feeds:\n  - name: Test\n    url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\n"
+
+	tests := []struct {
+		name   string
+		config string
+	}{
+		{"email from no @", "feeds:\n  - name: Test\n    url: https://example.com/feed\nemail:\n  from: invalid\n  to: c@d.com\n"},
+		{"email to no @", "feeds:\n  - name: Test\n    url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: invalid\n"},
+		{"port 99999", "feeds:\n  - name: Test\n    url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\n  smtp:\n    port: 99999\n    host: h\n"},
+		{"check_interval 0s", base + "check_interval: \"0s\"\n"},
+		{"check_interval negative", base + "check_interval: \"-5m\"\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := os.CreateTemp("", "config-*.yaml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Remove(f.Name())
+			f.WriteString(tt.config)
+			f.Close()
+
+			_, err = Load(f.Name())
+			if err == nil {
+				t.Error("expected validation error")
+			}
+		})
+	}
+}
+
 func TestLoadMissingFeedURL(t *testing.T) {
 	f, err := os.CreateTemp("", "config-*.yaml")
 	if err != nil {

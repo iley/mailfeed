@@ -32,7 +32,7 @@ func TestRenderHTML(t *testing.T) {
 		{"feed name", "Test Blog"},
 		{"date", "January 15, 2024"},
 		{"content bold", "<b>bold</b>"},
-		{"content link", `<a href="https://example.com">`},
+		{"content link", `href="https://example.com"`},
 		{"view original", "View original"},
 	}
 	for _, c := range checks {
@@ -109,6 +109,60 @@ func TestRenderPlainText(t *testing.T) {
 	}
 	if !strings.Contains(out, "bold") {
 		t.Error("expected stripped text content")
+	}
+}
+
+func TestRenderHTML_Sanitization(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		wantAbsent string // must NOT appear in output
+		wantIn     string // must appear in output (empty = skip check)
+	}{
+		{
+			name:       "script removed",
+			content:    `<p>Hello</p><script>alert("xss")</script>`,
+			wantAbsent: "<script",
+			wantIn:     "Hello",
+		},
+		{
+			name:       "iframe removed",
+			content:    `<p>Text</p><iframe src="https://evil.com"></iframe>`,
+			wantAbsent: "<iframe",
+			wantIn:     "Text",
+		},
+		{
+			name:       "event handler stripped",
+			content:    `<a href="https://example.com" onclick="alert(1)">link</a>`,
+			wantAbsent: "onclick",
+			wantIn:     "https://example.com",
+		},
+		{
+			name:       "form removed",
+			content:    `<form action="/steal"><input type="text"></form>`,
+			wantAbsent: "<form",
+		},
+		{
+			name:    "safe tags preserved",
+			content: `<p>Text with <b>bold</b> and <em>emphasis</em></p>`,
+			wantIn:  "<b>bold</b>",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := sampleItem
+			item.Content = tt.content
+			out, err := RenderHTML(item)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantAbsent != "" && strings.Contains(out, tt.wantAbsent) {
+				t.Errorf("output should not contain %q", tt.wantAbsent)
+			}
+			if tt.wantIn != "" && !strings.Contains(out, tt.wantIn) {
+				t.Errorf("output should contain %q", tt.wantIn)
+			}
+		})
 	}
 }
 
