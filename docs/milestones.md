@@ -30,7 +30,7 @@
 
 ## M5: Run Loop & Polish
 
-- Two modes: one-shot (`mailfeed run`) and periodic (`mailfeed daemon` with interval from config)
+- Two modes: one-shot (`mailfeed once`) and periodic (`mailfeed loop` with interval from config)
 - Graceful shutdown on SIGINT/SIGTERM
 - Logging (structured, minimal)
 - Error handling: unreachable feeds, SMTP failures, malformed items
