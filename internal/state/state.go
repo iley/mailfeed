@@ -61,39 +61,43 @@ func (s *State) Save(path string) error {
 	return nil
 }
 
-func (s *State) HasSeen(guid string) bool {
-	_, ok := s.Seen[guid]
+func (s *State) HasSeen(feedURL, guid string) bool {
+	_, ok := s.Seen[seenKey(feedURL, guid)]
 	return ok
 }
 
-func (s *State) MarkSeen(guid string) {
-	s.Seen[guid] = time.Now()
+func (s *State) MarkSeen(feedURL, guid string) {
+	s.Seen[seenKey(feedURL, guid)] = time.Now()
+}
+
+func seenKey(feedURL, guid string) string {
+	return feedURL + "\x00" + guid
 }
 
 // FilterNewItems returns items that should be sent.
-// For feeds never processed before, only the latest item is returned
-// and the rest are marked as seen. For known feeds, all unseen items
-// are returned (even if all items have rotated out of the feed).
+// For feeds never processed before (by URL), only the latest item is
+// returned and the rest are marked as seen. For known feeds, all unseen
+// items are returned (even if all items have rotated out of the feed).
 func (s *State) FilterNewItems(items []feed.Item) []feed.Item {
 	byFeed := make(map[string][]feed.Item)
 	for _, item := range items {
-		byFeed[item.FeedName] = append(byFeed[item.FeedName], item)
+		byFeed[item.FeedURL] = append(byFeed[item.FeedURL], item)
 	}
 
 	var result []feed.Item
-	for feedName, feedItems := range byFeed {
-		if !s.KnownFeeds[feedName] {
-			s.KnownFeeds[feedName] = true
+	for feedURL, feedItems := range byFeed {
+		if !s.KnownFeeds[feedURL] {
+			s.KnownFeeds[feedURL] = true
 			latest := latestItem(feedItems)
 			for _, item := range feedItems {
 				if item.GUID != latest.GUID {
-					s.MarkSeen(item.GUID)
+					s.MarkSeen(feedURL, item.GUID)
 				}
 			}
 			result = append(result, latest)
 		} else {
 			for _, item := range feedItems {
-				if !s.HasSeen(item.GUID) {
+				if !s.HasSeen(feedURL, item.GUID) {
 					result = append(result, item)
 				}
 			}

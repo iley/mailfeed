@@ -17,7 +17,7 @@ func TestParseRSS(t *testing.T) {
 	}
 	defer f.Close()
 
-	items, err := Parse(f, "Test Blog")
+	items, err := Parse(f, "Test Blog", "https://example.com/feed.xml")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,6 +42,9 @@ func TestParseRSS(t *testing.T) {
 	if items[0].FeedName != "Test Blog" {
 		t.Errorf("expected feed name 'Test Blog', got %q", items[0].FeedName)
 	}
+	if items[0].FeedURL != "https://example.com/feed.xml" {
+		t.Errorf("expected feed URL 'https://example.com/feed.xml', got %q", items[0].FeedURL)
+	}
 }
 
 func TestContentFallback(t *testing.T) {
@@ -51,7 +54,7 @@ func TestContentFallback(t *testing.T) {
 	}
 	defer f.Close()
 
-	items, err := Parse(f, "Test Blog")
+	items, err := Parse(f, "Test Blog", "https://example.com/feed.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +72,7 @@ func TestGUIDFallback(t *testing.T) {
 	}
 	defer f.Close()
 
-	items, err := Parse(f, "Test Blog")
+	items, err := Parse(f, "Test Blog", "https://example.com/feed.xml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,9 +84,9 @@ func TestGUIDFallback(t *testing.T) {
 }
 
 func TestGUIDSyntheticWhenEmpty(t *testing.T) {
-	item1 := mapItem(&gofeed.Item{Title: "Post A", Description: "content A"}, "Blog")
-	item2 := mapItem(&gofeed.Item{Title: "Post B", Description: "content B"}, "Blog")
-	item3 := mapItem(&gofeed.Item{Title: "Post A", Description: "content A"}, "Blog")
+	item1 := mapItem(&gofeed.Item{Title: "Post A", Description: "content A"}, "Blog", "https://example.com/feed")
+	item2 := mapItem(&gofeed.Item{Title: "Post B", Description: "content B"}, "Blog", "https://example.com/feed")
+	item3 := mapItem(&gofeed.Item{Title: "Post A", Description: "content A"}, "Blog", "https://example.com/feed")
 
 	if item1.GUID == "" {
 		t.Error("expected synthetic GUID, got empty string")
@@ -106,7 +109,7 @@ func TestParseAtom(t *testing.T) {
 	}
 	defer f.Close()
 
-	items, err := Parse(f, "Atom Feed")
+	items, err := Parse(f, "Atom Feed", "https://example.com/atom.xml")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,7 +149,7 @@ func TestFetchHTTP(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	items, err := Fetch(srv.URL, "HTTP Test")
+	items, err := Fetch(srv.URL, "HTTP Test", srv.URL)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,7 +168,7 @@ func TestFetchHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := Fetch(srv.URL, "Test")
+	_, err := Fetch(srv.URL, "Test", srv.URL)
 	if err == nil {
 		t.Fatal("expected error for 404 response")
 	}

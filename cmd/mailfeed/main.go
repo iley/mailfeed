@@ -52,7 +52,7 @@ func main() {
 	sender := email.NewSender(cfg.Email)
 	err = sender.SendAll(newItems, func(item feed.Item) {
 		sent++
-		st.MarkSeen(item.GUID)
+		st.MarkSeen(item.FeedURL, item.GUID)
 		if err := st.Save(*statePath); err != nil {
 			log.Printf("WARNING: failed to save state: %v", err)
 		}

@@ -15,6 +15,7 @@ import (
 
 type Item struct {
 	FeedName    string
+	FeedURL     string
 	Title       string
 	Link        string
 	Content     string
@@ -26,7 +27,7 @@ func FetchAll(feeds []config.Feed) ([]Item, error) {
 	var all []Item
 	var failed int
 	for _, f := range feeds {
-		items, err := Fetch(f.URL, f.Name)
+		items, err := Fetch(f.URL, f.Name, f.URL)
 		if err != nil {
 			log.Printf("WARNING: skipping feed %s: %v", f.URL, err)
 			failed++
@@ -42,7 +43,7 @@ func FetchAll(feeds []config.Feed) ([]Item, error) {
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-func Fetch(url, feedName string) ([]Item, error) {
+func Fetch(url, feedName, feedURL string) ([]Item, error) {
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP GET: %w", err)
@@ -53,10 +54,10 @@ func Fetch(url, feedName string) ([]Item, error) {
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	return Parse(resp.Body, feedName)
+	return Parse(resp.Body, feedName, feedURL)
 }
 
-func Parse(r io.Reader, feedName string) ([]Item, error) {
+func Parse(r io.Reader, feedName, feedURL string) ([]Item, error) {
 	fp := gofeed.NewParser()
 	parsed, err := fp.Parse(r)
 	if err != nil {
@@ -65,12 +66,12 @@ func Parse(r io.Reader, feedName string) ([]Item, error) {
 
 	items := make([]Item, 0, len(parsed.Items))
 	for _, gi := range parsed.Items {
-		items = append(items, mapItem(gi, feedName))
+		items = append(items, mapItem(gi, feedName, feedURL))
 	}
 	return items, nil
 }
 
-func mapItem(gi *gofeed.Item, feedName string) Item {
+func mapItem(gi *gofeed.Item, feedName, feedURL string) Item {
 	content := gi.Content
 	if content == "" {
 		content = gi.Description
@@ -94,6 +95,7 @@ func mapItem(gi *gofeed.Item, feedName string) Item {
 
 	return Item{
 		FeedName:    feedName,
+		FeedURL:     feedURL,
 		Title:       gi.Title,
 		Link:        gi.Link,
 		Content:     content,
