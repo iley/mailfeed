@@ -12,3 +12,4 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /src/mailfeed /usr/local/bin/mailfeed
 
 ENTRYPOINT ["mailfeed"]
+CMD ["loop"]
