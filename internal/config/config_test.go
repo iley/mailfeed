@@ -130,6 +130,18 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
+func TestSMTPUserFromEnv(t *testing.T) {
+	t.Setenv("MAILFEED_SMTP_USER", "env-user")
+
+	cfg, err := Load("../../testdata/config.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Email.SMTP.Username != "env-user" {
+		t.Errorf("expected username 'env-user', got %q", cfg.Email.SMTP.Username)
+	}
+}
+
 func TestSMTPPasswordFromEnv(t *testing.T) {
 	t.Setenv("MAILFEED_SMTP_PASSWORD", "env-secret")
 

@@ -77,7 +77,7 @@ check_interval: "30m"
 | `to` | Yes | Recipient email address |
 | `smtp.host` | Yes | SMTP server hostname |
 | `smtp.port` | No | SMTP port (465 for implicit TLS, 587 for STARTTLS) |
-| `smtp.username` | No | SMTP auth username |
+| `smtp.username` | No | SMTP auth username (can also be set via `MAILFEED_SMTP_USER` env var) |
 | `smtp.password` | No | SMTP auth password (can also be set via `MAILFEED_SMTP_PASSWORD` env var) |
 | `smtp.tls` | No | TLS mode: `"implicit"`, `"starttls"`, or `""` (auto-detect based on port) |
 
@@ -85,6 +85,7 @@ check_interval: "30m"
 
 | Variable | Description |
 |---|---|
+| `MAILFEED_SMTP_USER` | SMTP username. Overrides `smtp.username` from the config file. |
 | `MAILFEED_SMTP_PASSWORD` | SMTP password. Overrides `smtp.password` from the config file. |
 
 ### `check_interval` (optional)

@@ -50,8 +50,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parsing config: %w", err)
 	}
 
-	// Environment variable overrides config file for SMTP password,
-	// so credentials don't need to live in the config file.
+	// Environment variables override config file for SMTP credentials,
+	// so they don't need to live in the config file.
+	if envUser := os.Getenv("MAILFEED_SMTP_USER"); envUser != "" {
+		cfg.Email.SMTP.Username = envUser
+	}
 	if envPass := os.Getenv("MAILFEED_SMTP_PASSWORD"); envPass != "" {
 		cfg.Email.SMTP.Password = envPass
 	}
