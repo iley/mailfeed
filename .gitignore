@@ -1,4 +1,4 @@
 .claude
 mailfeed
-settings.json
-settings.yaml
+state.json
+config.yaml

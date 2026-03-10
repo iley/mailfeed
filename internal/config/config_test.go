@@ -130,6 +130,39 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
+func TestSMTPPasswordFromEnv(t *testing.T) {
+	t.Setenv("MAILFEED_SMTP_PASSWORD", "env-secret")
+
+	cfg, err := Load("../../testdata/config.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Email.SMTP.Password != "env-secret" {
+		t.Errorf("expected password 'env-secret', got %q", cfg.Email.SMTP.Password)
+	}
+}
+
+func TestSMTPPasswordEnvOverridesConfig(t *testing.T) {
+	// Write a config with a password in the file.
+	f, err := os.CreateTemp("", "config-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.WriteString("feeds:\n  - url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\n  smtp:\n    password: file-secret\n")
+	f.Close()
+
+	t.Setenv("MAILFEED_SMTP_PASSWORD", "env-secret")
+
+	cfg, err := Load(f.Name())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Email.SMTP.Password != "env-secret" {
+		t.Errorf("expected env password to override config file, got %q", cfg.Email.SMTP.Password)
+	}
+}
+
 func TestLoadMissingFeedURL(t *testing.T) {
 	f, err := os.CreateTemp("", "config-*.yaml")
 	if err != nil {
