@@ -93,13 +93,14 @@ func TestFilterKnownFeed(t *testing.T) {
 	}
 }
 
-func TestFilterNewFeed(t *testing.T) {
+func TestFilterNewFeedRecentItem(t *testing.T) {
 	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
 
+	now := time.Now()
 	items := []feed.Item{
-		{FeedName: "New Blog", FeedURL: blogURL, GUID: "a", PublishedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
-		{FeedName: "New Blog", FeedURL: blogURL, GUID: "b", PublishedAt: time.Date(2024, 1, 3, 0, 0, 0, 0, time.UTC)},
-		{FeedName: "New Blog", FeedURL: blogURL, GUID: "c", PublishedAt: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)},
+		{FeedName: "New Blog", FeedURL: blogURL, GUID: "a", PublishedAt: now.Add(-6 * 24 * time.Hour)},
+		{FeedName: "New Blog", FeedURL: blogURL, GUID: "b", PublishedAt: now.Add(-1 * 24 * time.Hour)},
+		{FeedName: "New Blog", FeedURL: blogURL, GUID: "c", PublishedAt: now.Add(-3 * 24 * time.Hour)},
 	}
 
 	result := s.FilterNewItems(items)
@@ -123,20 +124,48 @@ func TestFilterNewFeed(t *testing.T) {
 	}
 }
 
+func TestFilterNewFeedOldItem(t *testing.T) {
+	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
+
+	// All items are older than 7 days — none should be sent.
+	items := []feed.Item{
+		{FeedName: "New Blog", FeedURL: blogURL, GUID: "a", PublishedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{FeedName: "New Blog", FeedURL: blogURL, GUID: "b", PublishedAt: time.Date(2024, 1, 3, 0, 0, 0, 0, time.UTC)},
+		{FeedName: "New Blog", FeedURL: blogURL, GUID: "c", PublishedAt: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)},
+	}
+
+	result := s.FilterNewItems(items)
+	if len(result) != 0 {
+		t.Fatalf("expected 0 items for new feed with old posts, got %d", len(result))
+	}
+
+	// All items should be marked as seen.
+	if !s.HasSeen(blogURL, "a") {
+		t.Error("expected item 'a' to be marked seen")
+	}
+	if !s.HasSeen(blogURL, "b") {
+		t.Error("expected item 'b' to be marked seen")
+	}
+	if !s.HasSeen(blogURL, "c") {
+		t.Error("expected item 'c' to be marked seen")
+	}
+}
+
 func TestFilterMixedFeeds(t *testing.T) {
 	knownURL := "https://example.com/known/feed.xml"
 	s := &State{Seen: make(map[string]time.Time), KnownFeeds: make(map[string]bool)}
 	s.KnownFeeds[knownURL] = true
 	s.MarkSeen(knownURL, "known-old")
 
+	now := time.Now()
 	items := []feed.Item{
 		// Known feed: one seen, one new.
 		{FeedName: "Known", FeedURL: knownURL, GUID: "known-old", PublishedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
 		{FeedName: "Known", FeedURL: knownURL, GUID: "known-new", PublishedAt: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)},
-		// New feed: three items, only latest should be returned.
-		{FeedName: "Fresh", FeedURL: freshURL, GUID: "fresh-1", PublishedAt: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)},
-		{FeedName: "Fresh", FeedURL: freshURL, GUID: "fresh-2", PublishedAt: time.Date(2024, 1, 3, 0, 0, 0, 0, time.UTC)},
-		{FeedName: "Fresh", FeedURL: freshURL, GUID: "fresh-3", PublishedAt: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)},
+		// New feed: three items, only latest should be returned (and only if recent).
+		{FeedName: "Fresh", FeedURL: freshURL, GUID: "fresh-1", PublishedAt: now.Add(-5 * 24 * time.Hour)},
+		{FeedName: "Fresh", FeedURL: freshURL, GUID: "fresh-2", PublishedAt: now.Add(-1 * 24 * time.Hour)},
+		{FeedName: "Fresh", FeedURL: freshURL, GUID: "fresh-3", PublishedAt: now.Add(-3 * 24 * time.Hour)},
 	}
 
 	result := s.FilterNewItems(items)

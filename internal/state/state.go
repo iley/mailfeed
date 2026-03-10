@@ -117,7 +117,8 @@ func seenKey(feedURL, guid string) string {
 
 // FilterNewItems returns items that should be sent.
 // For feeds never processed before (by URL), only the latest item is
-// returned and the rest are marked as seen. For known feeds, all unseen
+// returned — and only if it was published within the last 7 days.
+// All other items are marked as seen. For known feeds, all unseen
 // items are returned (even if all items have rotated out of the feed).
 func (s *State) FilterNewItems(items []feed.Item) []feed.Item {
 	byFeed := make(map[string][]feed.Item)
@@ -130,12 +131,16 @@ func (s *State) FilterNewItems(items []feed.Item) []feed.Item {
 		if !s.KnownFeeds[feedURL] {
 			s.KnownFeeds[feedURL] = true
 			latest := latestItem(feedItems)
+			// For new feeds, only send the latest item if it's recent enough.
+			recentEnough := time.Since(latest.PublishedAt) <= 7*24*time.Hour
 			for _, item := range feedItems {
-				if item.GUID != latest.GUID {
+				if item.GUID != latest.GUID || !recentEnough {
 					s.MarkSeen(feedURL, item.GUID)
 				}
 			}
-			result = append(result, latest)
+			if recentEnough {
+				result = append(result, latest)
+			}
 		} else {
 			for _, item := range feedItems {
 				if !s.HasSeen(feedURL, item.GUID) {
