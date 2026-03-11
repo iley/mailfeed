@@ -119,6 +119,62 @@ func TestUseImplicitTLS(t *testing.T) {
 	}
 }
 
+func TestBuildDigestMessage(t *testing.T) {
+	d := DigestEmail{
+		FeedName: "Test Blog",
+		FeedURL:  "https://example.com/feed.xml",
+		Items: []feed.Item{
+			{
+				FeedName:    "Test Blog",
+				Title:       "Post One",
+				Link:        "https://example.com/one",
+				Content:     "<p>Content one</p>",
+				PublishedAt: time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC),
+			},
+			{
+				FeedName:    "Test Blog",
+				Title:       "Post Two",
+				Link:        "https://example.com/two",
+				Content:     "<p>Content two</p>",
+				PublishedAt: time.Date(2024, 1, 16, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+
+	msg, err := buildDigestMessage("from@example.com", "to@example.com", d)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	checks := []struct {
+		name     string
+		contains string
+	}{
+		{"from header", "From: from@example.com"},
+		{"to header", "To: to@example.com"},
+		{"subject", "Digest (2 items)"},
+		{"subject feed name", "Test Blog"},
+		{"mime version", "MIME-Version: 1.0"},
+		{"multipart", "Content-Type: multipart/alternative"},
+		{"text part", "Content-Type: text/plain; charset=utf-8"},
+		{"html part", "Content-Type: text/html; charset=utf-8"},
+		{"post one title", "Post One"},
+		{"post two title", "Post Two"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(msg, c.contains) {
+			t.Errorf("%s: expected message to contain %q", c.name, c.contains)
+		}
+	}
+}
+
+func TestSendDigestsEmpty(t *testing.T) {
+	s := NewSender(config.Email{})
+	if err := s.SendDigests(nil, nil); err != nil {
+		t.Errorf("expected no error for empty digests, got %v", err)
+	}
+}
+
 func TestSendAllEmpty(t *testing.T) {
 	s := NewSender(config.Email{})
 	if err := s.SendAll(nil, nil); err != nil {

@@ -63,6 +63,120 @@ func (s *Sender) SendAll(items []feed.Item, onSent func(feed.Item)) error {
 	return nil
 }
 
+// DigestEmail represents a bundled digest email for a single feed.
+type DigestEmail struct {
+	FeedName string
+	FeedURL  string
+	Items    []feed.Item
+}
+
+// SendDigests sends one digest email per feed over a single SMTP connection.
+// The onSent callback is called after each digest is successfully sent,
+// allowing the caller to update state incrementally.
+func (s *Sender) SendDigests(digests []DigestEmail, onSent func(feedURL string)) error {
+	if len(digests) == 0 {
+		return nil
+	}
+
+	c, err := s.connect()
+	if err != nil {
+		return fmt.Errorf("smtp connect: %w", err)
+	}
+	defer c.Close()
+
+	if err := s.authenticate(c); err != nil {
+		return fmt.Errorf("smtp auth: %w", err)
+	}
+
+	var errs []string
+	for _, d := range digests {
+		if err := s.sendDigest(c, d); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", d.FeedName, err))
+			if rErr := c.Reset(); rErr != nil {
+				return fmt.Errorf("sending failed (%d errors), connection lost: %s", len(errs), strings.Join(errs, "; "))
+			}
+			continue
+		}
+		if onSent != nil {
+			onSent(d.FeedURL)
+		}
+	}
+
+	c.Quit()
+
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to send %d digests: %s", len(errs), strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func (s *Sender) sendDigest(c *smtp.Client, d DigestEmail) error {
+	msg, err := buildDigestMessage(s.cfg.From, s.cfg.To, d)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Mail(s.cfg.From); err != nil {
+		return err
+	}
+	if err := c.Rcpt(s.cfg.To); err != nil {
+		return err
+	}
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte(msg)); err != nil {
+		w.Close()
+		return err
+	}
+	return w.Close()
+}
+
+func buildDigestMessage(from, to string, d DigestEmail) (string, error) {
+	htmlBody, err := RenderDigestHTML(d.FeedName, d.Items)
+	if err != nil {
+		return "", fmt.Errorf("render digest html: %w", err)
+	}
+	textBody, err := RenderDigestPlainText(d.FeedName, d.Items)
+	if err != nil {
+		return "", fmt.Errorf("render digest text: %w", err)
+	}
+
+	subject := fmt.Sprintf("[%s] Digest (%d items)", d.FeedName, len(d.Items))
+
+	boundary := fmt.Sprintf("mailfeed-%d", time.Now().UnixNano())
+	msgID := fmt.Sprintf("<%d.mailfeed@%s>", time.Now().UnixNano(), hostFromAddr(from))
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "From: %s\r\n", from)
+	fmt.Fprintf(&b, "To: %s\r\n", to)
+	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject))
+	fmt.Fprintf(&b, "Date: %s\r\n", time.Now().UTC().Format(time.RFC1123Z))
+	fmt.Fprintf(&b, "Message-ID: %s\r\n", msgID)
+	fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=%q\r\n", boundary)
+	fmt.Fprintf(&b, "\r\n")
+
+	fmt.Fprintf(&b, "--%s\r\n", boundary)
+	fmt.Fprintf(&b, "Content-Type: text/plain; charset=utf-8\r\n")
+	fmt.Fprintf(&b, "Content-Transfer-Encoding: 8bit\r\n")
+	fmt.Fprintf(&b, "\r\n")
+	b.WriteString(textBody)
+	fmt.Fprintf(&b, "\r\n")
+
+	fmt.Fprintf(&b, "--%s\r\n", boundary)
+	fmt.Fprintf(&b, "Content-Type: text/html; charset=utf-8\r\n")
+	fmt.Fprintf(&b, "Content-Transfer-Encoding: 8bit\r\n")
+	fmt.Fprintf(&b, "\r\n")
+	b.WriteString(htmlBody)
+	fmt.Fprintf(&b, "\r\n")
+
+	fmt.Fprintf(&b, "--%s--\r\n", boundary)
+
+	return b.String(), nil
+}
+
 func (s *Sender) useImplicitTLS() bool {
 	switch s.cfg.SMTP.TLS {
 	case "implicit":

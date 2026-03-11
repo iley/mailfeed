@@ -94,6 +94,38 @@ check_interval: "30m"
 | `MAILFEED_SMTP_USER` | SMTP username. Overrides `smtp.username` from the config file. |
 | `MAILFEED_SMTP_PASSWORD` | SMTP password. Overrides `smtp.password` from the config file. |
 
+### Digest Mode
+
+High-volume feeds can be bundled into a single daily digest email instead of sending one email per item. Mark a feed with `digest: true` and set a `digest_time` (globally or per-feed):
+
+```yaml
+digest_time: "08:00"        # default time for all digest feeds
+timezone: "Europe/Berlin"   # timezone for digest scheduling (default: UTC)
+
+feeds:
+  - name: "High-volume Blog"
+    url: "https://example.com/feed.xml"
+    digest: true             # bundles items, sends at 08:00 Berlin time
+  - name: "News"
+    url: "https://example.com/news.xml"
+    digest: true
+    digest_time: "18:00"     # per-feed override
+  - name: "Alerts"
+    url: "https://example.com/alerts.xml"
+    # no digest — sends immediately as before
+```
+
+New items from digest feeds are accumulated in the state file. When `mailfeed once` runs after the scheduled digest time, all accumulated items are sent as a single email. Digests are capped at 50 items per email; overflow items carry over to the next cycle.
+
+| Field | Required | Description |
+|---|---|---|
+| `digest_time` | No (global) | Default send time for digest feeds, in `HH:MM` format |
+| `timezone` | No | Timezone for digest scheduling. Defaults to `"UTC"` |
+| `feeds[].digest` | No | Set to `true` to enable digest mode for this feed |
+| `feeds[].digest_time` | No | Per-feed override for digest send time |
+
+`max_per_feed` does not apply to digest feeds. `max_per_day` counts each digest email as 1 send.
+
 ### `check_interval` (optional)
 
 How often to check feeds in `loop` mode. Uses Go duration syntax (`"30m"`, `"1h"`, `"2h30m"`). Required for the `loop` subcommand.
@@ -104,7 +136,7 @@ Custom User-Agent string for HTTP requests. Defaults to `"mailfeed/1.0"`.
 
 ## State File
 
-mailfeed tracks sent items in a JSON state file (default: `state.json`). When a new feed is added, only the latest item is sent — older items are marked as already seen. State is saved after each email, so a crash mid-run won't cause duplicates on restart.
+mailfeed tracks sent items in a JSON state file (default: `state.json`). When a new immediate feed is added, only the latest item is sent — older items are marked as already seen. New digest feeds are handled differently: all items are accumulated into the first digest. State is saved after each email, so a crash mid-run won't cause duplicates on restart. Pending digest items are also stored in the state file until their scheduled send time.
 
 ## Docker
 

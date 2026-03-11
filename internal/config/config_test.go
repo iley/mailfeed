@@ -190,6 +190,135 @@ func TestSMTPPasswordEnvOverridesConfig(t *testing.T) {
 	}
 }
 
+func TestDigestConfig(t *testing.T) {
+	f, err := os.CreateTemp("", "config-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.WriteString(`
+feeds:
+  - name: Digest Feed
+    url: https://example.com/digest.xml
+    digest: true
+  - name: Normal Feed
+    url: https://example.com/normal.xml
+email:
+  from: a@b.com
+  to: c@d.com
+digest_time: "08:00"
+timezone: "America/New_York"
+`)
+	f.Close()
+
+	cfg, err := Load(f.Name())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Feeds[0].Digest {
+		t.Error("expected feed 0 to be digest")
+	}
+	if cfg.Feeds[1].Digest {
+		t.Error("expected feed 1 to not be digest")
+	}
+	if cfg.DigestTime != "08:00" {
+		t.Errorf("expected digest_time '08:00', got %q", cfg.DigestTime)
+	}
+	if cfg.Timezone != "America/New_York" {
+		t.Errorf("expected timezone 'America/New_York', got %q", cfg.Timezone)
+	}
+	if cfg.Location().String() != "America/New_York" {
+		t.Errorf("expected location 'America/New_York', got %q", cfg.Location().String())
+	}
+}
+
+func TestDigestFeedTimeOverride(t *testing.T) {
+	f, err := os.CreateTemp("", "config-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	f.WriteString(`
+feeds:
+  - name: Feed A
+    url: https://example.com/a.xml
+    digest: true
+  - name: Feed B
+    url: https://example.com/b.xml
+    digest: true
+    digest_time: "18:00"
+email:
+  from: a@b.com
+  to: c@d.com
+digest_time: "08:00"
+`)
+	f.Close()
+
+	cfg, err := Load(f.Name())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.FeedDigestTime(cfg.Feeds[0]) != "08:00" {
+		t.Errorf("expected global digest time for feed A, got %q", cfg.FeedDigestTime(cfg.Feeds[0]))
+	}
+	if cfg.FeedDigestTime(cfg.Feeds[1]) != "18:00" {
+		t.Errorf("expected per-feed digest time for feed B, got %q", cfg.FeedDigestTime(cfg.Feeds[1]))
+	}
+}
+
+func TestDigestValidationErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		config string
+	}{
+		{
+			"digest without any digest_time",
+			"feeds:\n  - url: https://example.com/feed\n    digest: true\nemail:\n  from: a@b.com\n  to: c@d.com\n",
+		},
+		{
+			"invalid global digest_time",
+			"feeds:\n  - url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\ndigest_time: \"25:00\"\n",
+		},
+		{
+			"invalid per-feed digest_time",
+			"feeds:\n  - url: https://example.com/feed\n    digest: true\n    digest_time: \"not-a-time\"\nemail:\n  from: a@b.com\n  to: c@d.com\n",
+		},
+		{
+			"invalid timezone",
+			"feeds:\n  - url: https://example.com/feed\nemail:\n  from: a@b.com\n  to: c@d.com\ntimezone: \"Not/A/Zone\"\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := os.CreateTemp("", "config-*.yaml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Remove(f.Name())
+			f.WriteString(tt.config)
+			f.Close()
+
+			_, err = Load(f.Name())
+			if err == nil {
+				t.Error("expected validation error")
+			}
+		})
+	}
+}
+
+func TestDefaultTimezone(t *testing.T) {
+	cfg, err := Load("../../testdata/config.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Timezone != "UTC" {
+		t.Errorf("expected default timezone 'UTC', got %q", cfg.Timezone)
+	}
+	if cfg.Location().String() != "UTC" {
+		t.Errorf("expected location 'UTC', got %q", cfg.Location().String())
+	}
+}
+
 func TestLoadMissingFeedURL(t *testing.T) {
 	f, err := os.CreateTemp("", "config-*.yaml")
 	if err != nil {

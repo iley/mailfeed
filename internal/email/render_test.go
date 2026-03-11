@@ -166,6 +166,89 @@ func TestRenderHTML_Sanitization(t *testing.T) {
 	}
 }
 
+func TestRenderDigestHTML(t *testing.T) {
+	items := []feed.Item{
+		{
+			FeedName:    "Test Blog",
+			Title:       "First Post",
+			Link:        "https://example.com/first",
+			Content:     "<p>First content</p>",
+			PublishedAt: time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC),
+		},
+		{
+			FeedName:    "Test Blog",
+			Title:       "Second Post",
+			Link:        "https://example.com/second",
+			Content:     "<p>Second content</p>",
+			PublishedAt: time.Date(2024, 1, 16, 12, 0, 0, 0, time.UTC),
+		},
+	}
+
+	out, err := RenderDigestHTML("Test Blog", items)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	checks := []string{
+		"Test Blog",
+		"Digest (2 items)",
+		"First Post",
+		"Second Post",
+		"https://example.com/first",
+		"https://example.com/second",
+		"First content",
+		"Second content",
+		"mailfeed",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected output to contain %q", want)
+		}
+	}
+}
+
+func TestRenderDigestPlainText(t *testing.T) {
+	items := []feed.Item{
+		{
+			FeedName:    "Test Blog",
+			Title:       "First Post",
+			Link:        "https://example.com/first",
+			Content:     "<p>First content</p>",
+			PublishedAt: time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC),
+		},
+		{
+			FeedName:    "Test Blog",
+			Title:       "Second Post",
+			Link:        "https://example.com/second",
+			Content:     "<p>Second content</p>",
+			PublishedAt: time.Date(2024, 1, 16, 12, 0, 0, 0, time.UTC),
+		},
+	}
+
+	out, err := RenderDigestPlainText("Test Blog", items)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	checks := []string{
+		"Test Blog",
+		"Digest (2 items)",
+		"First Post",
+		"Second Post",
+		"First content",
+		"Second content",
+		"---",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected output to contain %q", want)
+		}
+	}
+	if strings.Contains(out, "<p>") {
+		t.Error("plain text should not contain HTML tags")
+	}
+}
+
 func TestStripHTML(t *testing.T) {
 	tests := []struct {
 		name  string

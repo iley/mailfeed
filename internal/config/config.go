@@ -14,11 +14,17 @@ type Config struct {
 	Email         Email  `yaml:"email"`
 	CheckInterval string `yaml:"check_interval"`
 	UserAgent     string `yaml:"user_agent"`
+	DigestTime    string `yaml:"digest_time"`
+	Timezone      string `yaml:"timezone"`
+
+	location *time.Location
 }
 
 type Feed struct {
-	Name string `yaml:"name"`
-	URL  string `yaml:"url"`
+	Name       string `yaml:"name"`
+	URL        string `yaml:"url"`
+	Digest     bool   `yaml:"digest"`
+	DigestTime string `yaml:"digest_time"`
 }
 
 type Email struct {
@@ -65,11 +71,32 @@ func Load(path string) (*Config, error) {
 		cfg.UserAgent = "mailfeed/1.0"
 	}
 
+	if cfg.Timezone == "" {
+		cfg.Timezone = "UTC"
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
+	// Parse timezone after validation (guaranteed to succeed).
+	cfg.location, _ = time.LoadLocation(cfg.Timezone)
+
 	return &cfg, nil
+}
+
+// Location returns the parsed timezone location.
+func (c *Config) Location() *time.Location {
+	return c.location
+}
+
+// FeedDigestTime returns the digest time for a feed,
+// using the per-feed override if set, otherwise the global default.
+func (c *Config) FeedDigestTime(f Feed) string {
+	if f.DigestTime != "" {
+		return f.DigestTime
+	}
+	return c.DigestTime
 }
 
 func (c Config) validate() error {
@@ -106,6 +133,31 @@ func (c Config) validate() error {
 	case "", "implicit", "starttls":
 	default:
 		return fmt.Errorf("invalid smtp.tls: %q (must be \"implicit\", \"starttls\", or empty)", c.Email.SMTP.TLS)
+	}
+	if _, err := time.LoadLocation(c.Timezone); err != nil {
+		return fmt.Errorf("invalid timezone: %w", err)
+	}
+	if c.DigestTime != "" {
+		if _, err := time.Parse("15:04", c.DigestTime); err != nil {
+			return fmt.Errorf("invalid digest_time: %w", err)
+		}
+	}
+	// Validate per-feed digest settings.
+	for i, f := range c.Feeds {
+		if f.DigestTime != "" {
+			if _, err := time.Parse("15:04", f.DigestTime); err != nil {
+				return fmt.Errorf("feed %d: invalid digest_time: %w", i, err)
+			}
+		}
+		if f.Digest {
+			dt := c.DigestTime
+			if f.DigestTime != "" {
+				dt = f.DigestTime
+			}
+			if dt == "" {
+				return fmt.Errorf("feed %d: digest is true but no digest_time configured (set it on the feed or globally)", i)
+			}
+		}
 	}
 	if c.CheckInterval != "" {
 		d, err := time.ParseDuration(c.CheckInterval)

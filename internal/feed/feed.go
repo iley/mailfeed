@@ -15,13 +15,13 @@ import (
 )
 
 type Item struct {
-	FeedName    string
-	FeedURL     string
-	Title       string
-	Link        string
-	Content     string
-	PublishedAt time.Time
-	GUID        string
+	FeedName    string    `json:"feed_name"`
+	FeedURL     string    `json:"feed_url"`
+	Title       string    `json:"title"`
+	Link        string    `json:"link"`
+	Content     string    `json:"content"`
+	PublishedAt time.Time `json:"published_at"`
+	GUID        string    `json:"guid"`
 }
 
 func FetchAll(ctx context.Context, feeds []config.Feed, userAgent string) ([]Item, error) {
