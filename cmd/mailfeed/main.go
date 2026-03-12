@@ -65,25 +65,66 @@ func main() {
 
 func runLoop(ctx context.Context, cfg *config.Config, statePath string, dryRun bool, interval time.Duration) {
 	slog.Info("starting loop", "interval", interval)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
 
 	// Run immediately on start.
 	if err := runOnce(ctx, cfg, statePath, dryRun); err != nil {
 		slog.Error("run failed", "error", err)
 	}
 
+	wait := nextWakeup(interval, cfg, time.Now())
+	slog.Info("next wakeup", "in", wait)
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			slog.Info("shutting down")
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			if err := runOnce(ctx, cfg, statePath, dryRun); err != nil {
 				slog.Error("run failed", "error", err)
 			}
+			wait = nextWakeup(interval, cfg, time.Now())
+			slog.Info("next wakeup", "in", wait)
+			timer.Reset(wait)
 		}
 	}
+}
+
+// nextWakeup returns the duration until the next time the loop should wake up,
+// which is the earlier of the regular check interval or the next digest send time.
+func nextWakeup(interval time.Duration, cfg *config.Config, now time.Time) time.Duration {
+	wait := interval
+	if t, ok := nextDigestWakeup(cfg, now); ok {
+		if d := time.Until(t); d < wait {
+			wait = d
+		}
+	}
+	// Clamp to avoid busy-looping if a digest time is in the past or imminent.
+	if wait < time.Second {
+		wait = time.Second
+	}
+	return wait
+}
+
+// nextDigestWakeup returns the earliest upcoming digest send time across all
+// configured digest feeds. Returns false if there are no digest feeds.
+func nextDigestWakeup(cfg *config.Config, now time.Time) (time.Time, bool) {
+	loc := cfg.Location()
+	var earliest time.Time
+	found := false
+	for _, f := range cfg.Feeds {
+		if !f.Digest {
+			continue
+		}
+		t := state.NextDigestTime(now, cfg.FeedDigestTime(f), loc)
+		if !found || t.Before(earliest) {
+			earliest = t
+			found = true
+		}
+	}
+	return earliest, found
 }
 
 func runOnce(ctx context.Context, cfg *config.Config, statePath string, dryRun bool) error {
